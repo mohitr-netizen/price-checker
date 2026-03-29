@@ -9,16 +9,17 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f2f0f7; min-height: 100vh; }
     header { background: #8863FB; color: white; padding: 18px 20px 14px; text-align: center; }
-    header h1 { font-size: 19px; font-weight: 700; letter-spacing: 0.3px; }
+    header h1 { font-size: 19px; font-weight: 700; }
     header p  { font-size: 12px; opacity: 0.8; margin-top: 3px; }
     #start-wrap { max-width: 480px; margin: 60px auto 0; padding: 0 16px; text-align: center; }
-    #start-btn { display: inline-block; width: 100%; padding: 18px; background: #8863FB; color: white; border: none; border-radius: 14px; font-size: 18px; font-weight: 700; cursor: pointer; }
-    #start-btn:active { opacity: 0.85; }
+    #start-btn { width: 100%; padding: 18px; background: #8863FB; color: white; border: none; border-radius: 14px; font-size: 18px; font-weight: 700; cursor: pointer; }
     #start-hint { margin-top: 14px; font-size: 13px; color: #888; }
-    #scanner-wrap { display: none; max-width: 480px; margin: 24px auto 0; padding: 0 16px; }
+    #scanner-wrap { display: none; max-width: 480px; margin: 16px auto 0; padding: 0 16px; }
     #reader { border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-    #scan-status { text-align: center; margin-top: 12px; font-size: 14px; color: #666; }
-    #result-card { display: none; max-width: 480px; margin: 24px 16px 0; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    #reader video { width: 100% !important; }
+    #scan-status { text-align: center; margin-top: 10px; font-size: 14px; color: #666; }
+    #scan-hint { text-align: center; margin-top: 6px; font-size: 12px; color: #aaa; }
+    #result-card { display: none; max-width: 480px; margin: 20px 16px 0; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
     #result-card.found     { border-top: 4px solid #8863FB; }
     #result-card.not-found { border-top: 4px solid #E53E3E; }
     #result-card.loading   { border-top: 4px solid #CBD5E0; }
@@ -36,7 +37,6 @@
     .not-found-sub { font-size: 13px; color: #888; }
     .loading-msg { font-size: 15px; color: #888; text-align: center; padding: 8px 0; }
     #scan-again-btn { display: block; width: 100%; margin-top: 20px; padding: 15px; background: #8863FB; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
-    #scan-again-btn:active { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -48,12 +48,13 @@
 
 <div id="start-wrap">
   <button id="start-btn" onclick="initScanner()">Tap to Start Scanner</button>
-  <p id="start-hint">You will be asked to allow camera access</p>
+  <p id="start-hint">Allow camera access when prompted</p>
 </div>
 
 <div id="scanner-wrap">
   <div id="reader"></div>
   <p id="scan-status">Initialising camera...</p>
+  <p id="scan-hint">Hold tag 10-15cm from camera</p>
 </div>
 
 <div id="result-card">
@@ -132,24 +133,22 @@ function startScanner() {
   }
 
   function onError(err) {
-    document.getElementById("scan-status").textContent = "Camera error: " + err.message;
+    document.getElementById("scan-status").textContent = "Camera error: " + (err.message || err);
   }
 
+  // No qrbox — scan full frame for small QR codes
+  // High resolution for back camera
   var config = {
-    fps: 10,
-    qrbox: function(w, h) {
-      var size = Math.min(w, h) * 0.8;
-      return { width: size, height: size };
-    },
+    fps: 15,
     videoConstraints: {
-      facingMode: "environment",
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
+      width:  { ideal: 1920 },
+      height: { ideal: 1080 },
+      facingMode: { ideal: "environment" }
     }
   };
 
   qrCode.start(
-    { facingMode: "environment" },
+    { facingMode: { ideal: "environment" } },
     config,
     onScanSuccess,
     function() {}
@@ -158,7 +157,9 @@ function startScanner() {
   .catch(function() {
     Html5Qrcode.getCameras().then(function(cameras) {
       if (!cameras.length) throw new Error("No camera found");
-      return qrCode.start(cameras[0].id, config, onScanSuccess, function() {});
+      var rear = cameras.find(function(c) { return /back|rear|environment/i.test(c.label); });
+      var camId = rear ? rear.id : cameras[cameras.length - 1].id;
+      return qrCode.start(camId, { fps: 15 }, onScanSuccess, function() {});
     })
     .then(onStarted)
     .catch(onError);
@@ -173,7 +174,6 @@ function onScanSuccess(barcode) {
   showState("loading");
 
   var result = PRICES[barcode.trim().toLowerCase()];
-
   if (result) {
     showCard("found");
     showState("found");
