@@ -126,25 +126,43 @@ function startScanner() {
   document.getElementById("scanner-wrap").style.display = "block";
   document.getElementById("scan-status").textContent = "Initialising camera...";
 
-  Html5Qrcode.getCameras()
-    .then(function(cameras) {
+  function onStarted() {
+    isScanning = true;
+    document.getElementById("scan-status").textContent = "Point at product QR code";
+  }
+
+  function onError(err) {
+    document.getElementById("scan-status").textContent = "Camera error: " + err.message;
+  }
+
+  var config = {
+    fps: 10,
+    qrbox: function(w, h) {
+      var size = Math.min(w, h) * 0.8;
+      return { width: size, height: size };
+    },
+    videoConstraints: {
+      facingMode: "environment",
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    }
+  };
+
+  qrCode.start(
+    { facingMode: "environment" },
+    config,
+    onScanSuccess,
+    function() {}
+  )
+  .then(onStarted)
+  .catch(function() {
+    Html5Qrcode.getCameras().then(function(cameras) {
       if (!cameras.length) throw new Error("No camera found");
-      var rear = cameras.find(function(c) { return /back|rear|environment/i.test(c.label); });
-      var camId = rear ? rear.id : cameras[cameras.length - 1].id;
-      return qrCode.start(
-        camId,
-        { fps: 12, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
-        onScanSuccess,
-        function() {}
-      );
+      return qrCode.start(cameras[0].id, config, onScanSuccess, function() {});
     })
-    .then(function() {
-      isScanning = true;
-      document.getElementById("scan-status").textContent = "Point at product QR code";
-    })
-    .catch(function(err) {
-      document.getElementById("scan-status").textContent = "Camera error: " + err.message;
-    });
+    .then(onStarted)
+    .catch(onError);
+  });
 }
 
 function onScanSuccess(barcode) {
