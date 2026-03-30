@@ -12,12 +12,7 @@
     header h1 { font-size: 19px; font-weight: 700; }
     header p  { font-size: 12px; opacity: 0.8; margin-top: 3px; }
     #main-wrap { max-width: 480px; margin: 40px auto 0; padding: 0 20px; text-align: center; }
-    #scan-btn {
-      display: block; width: 100%; padding: 20px;
-      background: #8863FB; color: white; border: none;
-      border-radius: 14px; font-size: 18px; font-weight: 700;
-      cursor: pointer; margin-bottom: 12px;
-    }
+    #scan-btn { display: block; width: 100%; padding: 20px; background: #8863FB; color: white; border: none; border-radius: 14px; font-size: 18px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
     #scan-btn:active { opacity: 0.85; }
     #file-input { display: none; }
     #status { font-size: 13px; color: #888; margin-top: 8px; min-height: 20px; }
@@ -50,7 +45,7 @@
 <div id="main-wrap">
   <button id="scan-btn" onclick="openCamera()">Take Photo to Scan</button>
   <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleImage(event)" />
-  <p id="status">Point camera at the QR tag and capture</p>
+  <p id="status">Tip: get close to the tag, keep it steady</p>
 
   <div id="result-card">
     <div id="state-found" style="display:none">
@@ -110,25 +105,12 @@ function handleImage(event) {
   reader.onload = function(e) {
     var img = new Image();
     img.onload = function() {
-      var canvas = document.getElementById("canvas");
-      var ctx = canvas.getContext("2d");
-
-      // Scale down if very large to speed up decoding
-      var maxSize = 1200;
-      var scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-      canvas.width  = img.width  * scale;
-      canvas.height = img.height * scale;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert"
-      });
+      var code = tryDecode(img);
 
       if (code) {
-        showResult(code.data);
+        showResult(code);
       } else {
-        document.getElementById("status").textContent = "Could not read QR code. Try again closer.";
+        document.getElementById("status").textContent = "Could not read QR. Get closer and try again.";
       }
     };
     img.src = e.target.result;
@@ -136,11 +118,46 @@ function handleImage(event) {
   reader.readAsDataURL(file);
 }
 
+function tryDecode(img) {
+  var canvas = document.getElementById("canvas");
+  var ctx = canvas.getContext("2d");
+
+  // Try 1: full image, full resolution
+  canvas.width  = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+  var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+  if (code) return code.data;
+
+  // Try 2: scan each quadrant (in case QR is small in one corner)
+  var halfw = Math.floor(img.width  / 2);
+  var halfh = Math.floor(img.height / 2);
+  var crops = [
+    [0,        0,        halfw, halfh],
+    [halfw,    0,        halfw, halfh],
+    [0,        halfh,    halfw, halfh],
+    [halfw,    halfh,    halfw, halfh],
+    [img.width*0.25, img.height*0.25, img.width*0.5, img.height*0.5]
+  ];
+
+  for (var i = 0; i < crops.length; i++) {
+    var c = crops[i];
+    canvas.width  = c[2];
+    canvas.height = c[3];
+    ctx.drawImage(img, c[0], c[1], c[2], c[3], 0, 0, c[2], c[3]);
+    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+    if (code) return code.data;
+  }
+
+  return null;
+}
+
 function showResult(barcode) {
   var result = PRICES[barcode.trim().toLowerCase()];
-  var card = document.getElementById("result-card");
+  var card   = document.getElementById("result-card");
   card.style.display = "block";
-
   document.getElementById("state-found").style.display    = "none";
   document.getElementById("state-notfound").style.display = "none";
 
@@ -151,7 +168,7 @@ function showResult(barcode) {
     document.getElementById("val-barcode").textContent = result.barcode  || "-";
     document.getElementById("val-price").textContent   = fmt(result.price);
     document.getElementById("val-special").textContent = result.specialPrice ? fmt(result.specialPrice) : "-";
-    document.getElementById("status").textContent = "Found!";
+    document.getElementById("status").textContent      = "Found!";
   } else {
     card.className = "not-found";
     document.getElementById("state-notfound").style.display = "block";
@@ -162,7 +179,7 @@ function showResult(barcode) {
 
 function scanAgain() {
   document.getElementById("result-card").style.display = "none";
-  document.getElementById("status").textContent = "Point camera at the QR tag and capture";
+  document.getElementById("status").textContent = "Tip: get close to the tag, keep it steady";
   openCamera();
 }
 </script>
