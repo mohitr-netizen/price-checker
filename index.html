@@ -45,7 +45,7 @@
 <div id="main-wrap">
   <button id="scan-btn" onclick="openCamera()">Take Photo to Scan</button>
   <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleImage(event)" />
-  <p id="status">Tip: get close to the tag, keep it steady</p>
+  <p id="status">Get close to the tag so QR fills the screen</p>
 
   <div id="result-card">
     <div id="state-found" style="display:none">
@@ -97,7 +97,6 @@ function openCamera() {
 function handleImage(event) {
   var file = event.target.files[0];
   if (!file) return;
-
   document.getElementById("status").textContent = "Scanning...";
   document.getElementById("result-card").style.display = "none";
 
@@ -105,8 +104,7 @@ function handleImage(event) {
   reader.onload = function(e) {
     var img = new Image();
     img.onload = function() {
-      var code = tryDecode(img);
-
+      var code = tryAllRotations(img);
       if (code) {
         showResult(code);
       } else {
@@ -118,39 +116,55 @@ function handleImage(event) {
   reader.readAsDataURL(file);
 }
 
-function tryDecode(img) {
-  var canvas = document.getElementById("canvas");
+function decodeFromCanvas(canvas) {
   var ctx = canvas.getContext("2d");
-
-  // Try 1: full image, full resolution
-  canvas.width  = img.width;
-  canvas.height = img.height;
-  ctx.drawImage(img, 0, 0);
   var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-  if (code) return code.data;
+  return code ? code.data : null;
+}
 
-  // Try 2: scan each quadrant (in case QR is small in one corner)
-  var halfw = Math.floor(img.width  / 2);
-  var halfh = Math.floor(img.height / 2);
-  var crops = [
-    [0,        0,        halfw, halfh],
-    [halfw,    0,        halfw, halfh],
-    [0,        halfh,    halfw, halfh],
-    [halfw,    halfh,    halfw, halfh],
-    [img.width*0.25, img.height*0.25, img.width*0.5, img.height*0.5]
-  ];
+function tryAllRotations(img) {
+  var canvas = document.getElementById("canvas");
+  var ctx = canvas.getContext("2d");
+  var w = img.width;
+  var h = img.height;
+  var rotations = [0, 90, 180, 270];
+  var result;
 
-  for (var i = 0; i < crops.length; i++) {
-    var c = crops[i];
-    canvas.width  = c[2];
-    canvas.height = c[3];
-    ctx.drawImage(img, c[0], c[1], c[2], c[3], 0, 0, c[2], c[3]);
-    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-    if (code) return code.data;
+  for (var r = 0; r < rotations.length; r++) {
+    var deg = rotations[r];
+    var isRotated = deg === 90 || deg === 270;
+    canvas.width  = isRotated ? h : w;
+    canvas.height = isRotated ? w : h;
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(deg * Math.PI / 180);
+    ctx.drawImage(img, -w / 2, -h / 2);
+    ctx.restore();
+
+    // Try full image
+    result = decodeFromCanvas(canvas);
+    if (result) return result;
+
+    // Try quadrants
+    var crops = [
+      [0,              0,              canvas.width/2, canvas.height/2],
+      [canvas.width/2, 0,              canvas.width/2, canvas.height/2],
+      [0,              canvas.height/2, canvas.width/2, canvas.height/2],
+      [canvas.width/2, canvas.height/2, canvas.width/2, canvas.height/2]
+    ];
+
+    for (var i = 0; i < crops.length; i++) {
+      var c = crops[i];
+      var tmp = document.createElement("canvas");
+      tmp.width  = c[2];
+      tmp.height = c[3];
+      tmp.getContext("2d").drawImage(canvas, c[0], c[1], c[2], c[3], 0, 0, c[2], c[3]);
+      result = decodeFromCanvas(tmp);
+      if (result) return result;
+    }
   }
-
   return null;
 }
 
@@ -179,7 +193,7 @@ function showResult(barcode) {
 
 function scanAgain() {
   document.getElementById("result-card").style.display = "none";
-  document.getElementById("status").textContent = "Tip: get close to the tag, keep it steady";
+  document.getElementById("status").textContent = "Get close to the tag so QR fills the screen";
   openCamera();
 }
 </script>
