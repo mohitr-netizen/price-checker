@@ -140,7 +140,9 @@ var PRICES = {"be03m9ew33c":{"sku":"JAR00012-YB3A-000000000-00_0004","barcode":"
 
 function fmt(n) {
   if (!n && n !== 0) return "-";
-  return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var num = Number(String(n).replace(/,/g, ""));
+  if (isNaN(num)) return "-";
+  return "$" + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function lookup() {
