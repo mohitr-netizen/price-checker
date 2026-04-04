@@ -162,7 +162,7 @@ function showResult(barcode) {
     document.getElementById('val-color').textContent   = item.color || '-';
     document.getElementById('val-clarity').textContent = item.clarity || '-';
     posBtn.style.display = 'block';
-    posBtn.href = 'https://www.caratlane.com/jewellery/search?q=' + encodeURIComponent(item.sku);
+    posBtn.href = 'https://store.caratlane.us/catalogsearch/result/?q=' + encodeURIComponent(barcode.trim().toUpperCase()) + '&type=barcode';
   } else {
     card.className = 'not-found';
     found.style.display = 'none';
